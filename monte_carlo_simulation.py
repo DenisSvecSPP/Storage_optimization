@@ -40,11 +40,11 @@ def monte_carlo_simulation_func(min_inventory, max_inventory, forward_prices, st
     annual_inflation = 0.02
     inflation_monthly = (1.0 + annual_inflation)**(1/12.0) - 1.0  # ≈ 0.0016515
 
-    # Count whole months elapsed from the simulation start month
-    start_month = all_days[0].to_period('M')
-    months_elapsed = (all_days.to_period('M') - start_month).astype(int).to_numpy()
-
-    # Monthly inflation multiplier applied piecewise-constant within each month
+    # Count months elapsed from the first day of the start month
+    # (works regardless of pandas Period quirks)
+    start_mnum = all_days[0].year * 12 + all_days[0].month
+    mnum       = (all_days.year * 12 + all_days.month).to_numpy()
+    months_elapsed = (mnum - start_mnum).astype(np.int64)
     inflation_multiplier = (1.0 + inflation_monthly) ** months_elapsed
 
     # Inflate the base curve (daily_base is your monthly→daily forward-filled base)
@@ -123,25 +123,15 @@ def monte_carlo_simulation_func(min_inventory, max_inventory, forward_prices, st
             max_inject, max_withdraw = get_ratchet_rates(inv_percent)
 
             # decide action vs next day's price
-            if i < n_days - 1:
-                next_price = sim_prices[i + 1]
-                if next_price > price:
-                    action = "Inject"
-                elif next_price < price:
-                    action = "Withdraw"
-                else:
-                    # flat segment -> look ahead to first change
-                    j = i
-                    while j < n_days - 1 and sim_prices[j + 1] == sim_prices[j]:
-                        j += 1
-                    if j < n_days - 1:
-                        action = "Inject" if sim_prices[j + 1] > price else "Withdraw"
-                    else:
-                        action = "Hold"
-            else:
-                # last day: dump remaining inventory
-                action = "Withdraw" if current_inventory > min_inventory else "Hold"
+            feasible_actions = ["Hold"]  # always feasible
+            if (current_inventory < max_inventory) and (max_inject > 0):
+                feasible_actions.append("Inject")
+            if (current_inventory > min_inventory) and (max_withdraw > 0):
+                feasible_actions.append("Withdraw")
 
+            # Sample one action uniformly at random among feasible
+            # (If you want custom weights, replace the next line with rng.choice(feasible_actions, p=weights))
+            action = np.random.choice(feasible_actions)
             # execute within constraints
             volume = 0.0
             if action == "Inject":
