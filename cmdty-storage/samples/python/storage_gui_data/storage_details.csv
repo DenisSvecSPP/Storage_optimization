@@ -1,0 +1,8 @@
+key,value
+storage_start,2021-04-01
+storage_end,2022-04-01
+injection_cost,0.51
+withdrawal_cost,0.16
+cmdty_consumed_inject,0.0
+cmdty_consumed_withdraw,0.0
+storage_type,ratchets

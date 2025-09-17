@@ -1,0 +1,61 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <FullNetVersion>net461</FullNetVersion>
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">$(TargetFrameworks);$(FullNetVersion)</TargetFrameworks>
+    <PackageId>Cmdty.Storage</PackageId>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/cmdty/storage</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cmdty/storage</RepositoryUrl>
+    <Description>Valuation and optimisation of commodity storage facilities.</Description>
+    <PackageTags>commodities;trading;oil;gas;power;quantitative;finance</PackageTags>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cmdty.Core" Version="0.1.0-alpha2020101802" />
+    <PackageReference Include="MathNet.Numerics.MKL.Win" Version="2.4.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="3.4.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Cmdty.Storage.Test, PublicKey=00240000048000009400000006020000002400005253413100040000010001000719be14a0c566e30fbccf4924b7f04021767c9a61b82d74f543134c686a8a26593b50195e204a9e3e3e39c2fb9fde5fb6e76788b7221d2fb92e36fb19961b0beae96ad53f5c133299b6dd4a003cddfc12fc0d13888d230ca7f219493b039a10adc443b2e34316f4c111ef34e1463a96cd12e550af46e0d42c72309c0e15ea9a</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == '$(FullNetVersion)'">
+    <PropertyGroup>
+      <PythonLibDir>..\Cmdty.Storage.Python\cmdty_storage\lib</PythonLibDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\*.dll" />
+      <ManagedFilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\*.pdb" />
+    </ItemGroup>
+    <MakeDir Directories="$(PythonLibDir)" />
+    <Copy SourceFiles="@(ManagedFilesToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib" OverwriteReadOnlyFiles="true" />
+    <WriteLinesToFile File="..\Cmdty.Storage.Python\cmdty_storage\__version__.py" Lines="__version__ = '$(PythonVersion)'" Overwrite="true" WriteOnlyWhenDifferent="true" />
+
+    <ItemGroup>
+      <NativeX86FilesToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\x86\*.dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(PythonLibDir)\x86" />
+    <Copy SourceFiles="@(NativeX86FilesToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib\x86" OverwriteReadOnlyFiles="true" />
+
+    <ItemGroup>
+      <NativeX64FileToCopyForPython Include="$(ProjectDir)bin\$(ConfigurationName)\$(FullNetVersion)\x64\*.dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(PythonLibDir)\x64" />
+    <Copy SourceFiles="@(NativeX64FileToCopyForPython)" DestinationFolder="..\Cmdty.Storage.Python\cmdty_storage\lib\x64" OverwriteReadOnlyFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <None Remove="Cmdty.Storage.csproj.DotSettings" />
+  </ItemGroup>
+
+</Project>

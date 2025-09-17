@@ -1,0 +1,4 @@
+key,value
+smooth_curve,True
+apply_weekend_shaping,True
+weekend_shaping_factor,0.995

@@ -1,0 +1,10 @@
+key,value
+num_sims,1000
+basis_funcs,1 + x_st + x_sw + x_lt + x_st**2 + x_sw**2 + x_lt**2 + x_st**3 + x_sw**3 + x_lt**3
+seed,11
+seed_is_random,False
+fwd_sim_seed,13
+set_fwd_sim_seed,True
+extra_decisions,0
+num_inventory_grid_points,100
+numerical_tolerance,1e-10
