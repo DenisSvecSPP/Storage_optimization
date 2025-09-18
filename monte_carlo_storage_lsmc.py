@@ -62,20 +62,12 @@ def expand_monthly_to_daily(forward_prices, start_date=None):
 
 def generate_price_paths(
     forward_prices, monthly_profile, n_sims,
-    daily_volatility=0.5, kappa=3.0, start_date=None,
-    annual_inflation=0.0  # e.g. 0.02 for 2%/yr; monthly compounding
-):
+    daily_volatility=0.5, kappa=3.0, start_date=None,):
+
     all_days, daily_base = expand_monthly_to_daily(forward_prices, start_date)
     n_days = daily_base.size
 
-    # monthly inflation (piecewise constant)
-    if annual_inflation and annual_inflation != 0.0:
-        infl_m = (1.0 + annual_inflation)**(1/12.0) - 1.0
-        start_mnum = all_days[0].year * 12 + all_days[0].month
-        mnum = (all_days.year * 12 + all_days.month).to_numpy()
-        months_elapsed = (mnum - start_mnum).astype(np.int64)
-        infl_mult = (1.0 + infl_m) ** months_elapsed
-        daily_base = daily_base * infl_mult
+
 
     # month-of-year seasonal multiplier
     if not isinstance(monthly_profile, pd.Series):
@@ -273,14 +265,14 @@ def monte_carlo_storage_lsmc_func(
     min_inventory, max_inventory, start_inventory,
     inj_pct, inj_vol, wd_pct, wd_vol,
     n_sims=2000, daily_volatility=0.5, kappa=3.0,
-    start_date=None, annual_inflation=0.0, r_annual=0.0,
+    start_date=None, r_annual=0.0,
     seed=None
 ):
     # Prices
     all_days, sim_prices = generate_price_paths(
         forward_prices, monthly_profile, n_sims,
         daily_volatility=daily_volatility, kappa=kappa,
-        start_date=start_date, annual_inflation=annual_inflation
+        start_date=start_date
     )
 
     # Rollout under random feasible policy to generate state coverage
