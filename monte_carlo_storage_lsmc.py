@@ -35,16 +35,14 @@ def features(price, inv):
 # 1) Build daily timeline & daily base curve
 # -----------------------------------------
 
-def expand_monthly_to_daily(forward_prices, start_date=None):
+def expand_monthly_to_daily(forward_prices):
     fwd = np.asarray(forward_prices, dtype=float)
     if fwd.size == 0:
         raise ValueError("forward_prices is empty.")
 
-    if start_date is None:
-        today = pd.Timestamp.today().normalize()
-        start_month = today.replace(day=1)
-    else:
-        start_month = pd.Timestamp(start_date).normalize().replace(day=1)
+   
+    today = pd.Timestamp.today().normalize()
+    start_month = today.replace(day=1)
 
     month_starts = pd.date_range(start=start_month, periods=fwd.size, freq="MS")
     last_day = month_starts[-1] + pd.offsets.MonthEnd(0)
@@ -62,9 +60,9 @@ def expand_monthly_to_daily(forward_prices, start_date=None):
 
 def generate_price_paths(
     forward_prices, monthly_profile, n_sims,
-    daily_volatility=0.5, kappa=3.0, start_date=None,):
+    daily_volatility=0.5, kappa=3.0):
 
-    all_days, daily_base = expand_monthly_to_daily(forward_prices, start_date)
+    all_days, daily_base = expand_monthly_to_daily(forward_prices)
     n_days = daily_base.size
 
 
@@ -95,7 +93,7 @@ def generate_price_paths(
 # ---------------------------------------------------------
 
 def rollout_random_policy(sim_prices, min_inv, max_inv, start_inv,
-                          inj_pct, inj_vol, wd_pct, wd_vol, rng=None):
+                          inj_pct, inj_vol, wd_pct, wd_vol, inj_var_cost, wd_var_cost, rng=None):
     n_days, n_sims = sim_prices.shape
     if rng is None:
         rng = np.random.default_rng()
@@ -123,14 +121,19 @@ def rollout_random_policy(sim_prices, min_inv, max_inv, start_inv,
                 vol = min(max_inj, max_inv - inv[s])
                 if vol > 0:
                     inv[s] += vol
-                    cf[t, s] = -price_t[s] * vol
+                    # cf[t, s] = -price_t[s] * vol
+                    cf[t, s] = -(price_t[s] * vol) - (inj_var_cost * vol)
+
+                   
                 else:
                     a = "Hold"; vol = 0.0
             elif a == "Withdraw":
                 vol = min(max_wd, inv[s] - min_inv)
                 if vol > 0:
                     inv[s] -= vol
-                    cf[t, s] = +price_t[s] * vol
+                    # cf[t, s] = +price_t[s] * vol
+                    cf[t, s] = +(price_t[s] * vol) - (wd_var_cost * vol)
+
                 else:
                     a = "Hold"; vol = 0.0
             else:
@@ -146,7 +149,7 @@ def rollout_random_policy(sim_prices, min_inv, max_inv, start_inv,
 # -------------------------------------------------------
 
 def lsmc_backward(sim_prices, inv_paths, min_inv, max_inv,
-                  inj_pct, inj_vol, wd_pct, wd_vol,
+                  inj_pct, inj_vol, wd_pct, wd_vol, inj_var_cost, wd_var_cost,
                   r_annual=0.0):
     """
     Given price paths and a *forward* rollout of inventory states (from any baseline policy),
@@ -157,7 +160,9 @@ def lsmc_backward(sim_prices, inv_paths, min_inv, max_inv,
     Returns:
       actions_opt (n_days, n_sims), value0 (expected NPV), and a sample schedule DataFrame.
     """
+
     n_days, n_sims = sim_prices.shape
+  
     dt = 1.0 / 365.0
     disc = np.exp(-r_annual * dt)
 
@@ -168,6 +173,7 @@ def lsmc_backward(sim_prices, inv_paths, min_inv, max_inv,
 
     # Backward induction
     for t in range(n_days - 1, -1, -1):
+      
         p_t = sim_prices[t, :]
         inv_t = inv_paths[t, :]
 
@@ -180,8 +186,11 @@ def lsmc_backward(sim_prices, inv_paths, min_inv, max_inv,
 
                 # Values for each action
                 val_hold = 0.0
-                val_inj  = -p_t[s] * min(max_inj, max_inv - inv_t[s])
-                val_wd   =  p_t[s] * min(max_wd, inv_t[s] - min_inv)
+                vol_inj = min(max_inj, max_inv - inv_t[s])
+                val_inj = -(p_t[s] * vol_inj) - (inj_var_cost * vol_inj)
+                vol_wd  = min(max_wd, inv_t[s] - min_inv)
+                val_wd  = +(p_t[s] * vol_wd) - (wd_var_cost * vol_wd)
+
                 # Pick best
                 vals = {"Hold": val_hold, "Inject": val_inj, "Withdraw": val_wd}
                 a_star = max(vals, key=vals.get)
@@ -214,13 +223,17 @@ def lsmc_backward(sim_prices, inv_paths, min_inv, max_inv,
             vol_inj = min(max_inj, max_inv - inv_t[s])
             inv_inj = inv_t[s] + vol_inj
             cont_inj = features(np.array([p_next[s]]), np.array([inv_inj])).dot(beta)[0]
-            val_inj = (-p_t[s] * vol_inj) + disc * cont_inj
+            # val_inj = (-p_t[s] * vol_inj) + disc * cont_inj
+            val_inj = (-(p_t[s] * vol_inj) - (inj_var_cost * vol_inj)) + disc * cont_inj
+
 
             # Withdraw
             vol_wd = min(max_wd, inv_t[s] - min_inv)
             inv_wd = inv_t[s] - vol_wd
             cont_wd = features(np.array([p_next[s]]), np.array([inv_wd])).dot(beta)[0]
-            val_wd = (+p_t[s] * vol_wd) + disc * cont_wd
+            # val_wd = (+p_t[s] * vol_wd) + disc * cont_wd
+            val_wd = ((+p_t[s] * vol_wd) - (wd_var_cost * vol_wd)) + disc * cont_wd
+
 
             vals = {"Hold": val_hold, "Inject": val_inj, "Withdraw": val_wd}
             a_star = max(vals, key=vals.get)
@@ -265,30 +278,30 @@ def monte_carlo_storage_lsmc_func(
     min_inventory, max_inventory, start_inventory,
     inj_pct, inj_vol, wd_pct, wd_vol,
     n_sims=2000, daily_volatility=0.5, kappa=3.0,
-    start_date=None, r_annual=0.0,
+    inj_var_cost=0.05, wd_var_cost=0.03, r_annual=0.0,
     seed=None
 ):
     # Prices
     all_days, sim_prices = generate_price_paths(
         forward_prices, monthly_profile, n_sims,
         daily_volatility=daily_volatility, kappa=kappa,
-        start_date=start_date
+        
     )
 
     # Rollout under random feasible policy to generate state coverage
     rng = np.random.default_rng(seed)
     inv_paths, cf_rollout, _ = rollout_random_policy(
         sim_prices, min_inventory, max_inventory, start_inventory,
-        inj_pct, inj_vol, wd_pct, wd_vol, rng=rng
+        inj_pct, inj_vol, wd_pct, wd_vol, inj_var_cost, wd_var_cost, rng=rng
     )
 
     # LSMC backward improvement
     actions_opt, value0, sample_df = lsmc_backward(
         sim_prices, inv_paths, min_inventory, max_inventory,
-        inj_pct, inj_vol, wd_pct, wd_vol, r_annual=r_annual
+        inj_pct, inj_vol, wd_pct, wd_vol,inj_var_cost, wd_var_cost, r_annual=r_annual
     )
 
     # Attach calendar dates into sample_df for readability
-    sample_df["Date"] = expand_monthly_to_daily(forward_prices, start_date)[0].date
+    sample_df["Date"] = expand_monthly_to_daily(forward_prices)[0].date
 
     return value0, sample_df, all_days, actions_opt
